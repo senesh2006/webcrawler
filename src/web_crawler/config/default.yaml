@@ -1,0 +1,185 @@
+# Web Crawler Default Configuration
+# This file contains all configurable settings for the crawler pipeline
+
+# Pipeline-wide settings
+pipeline:
+  queue_size: 1000                      # Maximum items in each queue between stages
+  
+  # Worker counts per stage (adjust based on workload)
+  url_validation_workers: 2
+  duplicate_detection_workers: 2
+  robots_validation_workers: 2
+  rate_limiting_workers: 3
+  fetch_workers: 10                     # Most workers here (I/O bound)
+  parse_workers: 3
+  link_extraction_workers: 2
+  content_extraction_workers: 2
+  storage_workers: 1                      # <-- FIX 1: Set to 1 to prevent database lock
+  link_reinjection_workers: 2
+
+# Individual stage configurations
+stages:
+  
+  # Stage 1: URL Validation
+  url_validation:
+    allowed_domains:                    # Empty = allow all domains
+      - finance.yahoo.com             # <-- Recommended for this crawl
+    blocked_domains: []                 # Domains to explicitly block
+    max_depth: 3                        # Maximum crawl depth (0 = seed URLs only)
+    allowed_schemes:
+      - http
+      - https
+    blocked_extensions:                 # File types to skip
+      - .pdf
+      - .jpg
+      - .jpeg
+      - .png
+      - .gif
+      - .bmp
+      - .svg
+      - .zip
+      - .tar
+      - .gz
+      - .rar
+      - .7z
+      - .mp4
+      - .avi
+      - .mov
+      - .mp3
+      - .wav
+      - .exe
+      - .dmg
+      - .doc
+      - .docx
+      - .xls
+      - .xlsx
+      - .ppt
+      - .pptx
+      - .css
+      - .js
+      - .json
+      - .xml
+    normalize_urls: true
+  
+  # Stage 2: Duplicate Detection
+  duplicate_detection:
+    method: set                         # Options: set, bloom, database
+    bloom_capacity: 1000000             # For bloom filter method
+    bloom_error_rate: 0.01              # 1% false positive rate
+    database_path: data/seen_urls.db    # For database method
+    case_sensitive: false
+  
+  # Stage 3: Robots.txt Validation
+  robots:
+    user_agent: MyWebCrawler/1.0
+    respect_robots_txt: true            # Set to false to ignore robots.txt
+    cache_ttl_hours: 24                 # Re-fetch robots.txt after this time
+    default_on_error: allow             # Options: allow, disallow
+    timeout_seconds: 10
+    max_retries: 2
+  
+  # Stage 4: Rate Limiting
+  rate_limiting:
+    default_delay_seconds: 1.0          # Minimum delay between requests per domain
+    max_concurrent_per_domain: 1        # Max simultaneous requests per domain
+    respect_crawl_delay: true           # Use crawl-delay from robots.txt
+    global_rate_limit: null             # Max requests/second across all domains (null = no limit)
+    burst_size: 5                       # Allow burst of requests
+    strategy: fixed                     # Options: fixed, token_bucket, sliding_window
+  
+  # Stage 5: HTTP Fetch
+  fetch:
+    # --- BROWSER SETTINGS (for Yahoo) ---
+    use_headless_browser: true          # Set to true to use Playwright (slower, for JS sites)
+    browser_type: chromium              # Options: chromium, firefox, webkit
+    wait_for_selector: null             # (Optional) CSS selector to wait for (e.g., "#content")
+    page_load_delay: 2.0                # (Optional) Extra seconds to wait for JS animations
+    # ----------------------------
+    
+    timeout_seconds: 30
+    max_retries: 3
+    max_redirects: 5
+    verify_ssl: true                    # Verify SSL certificates
+    user_agent: MyWebCrawler/1.0
+    max_content_size_mb: 10             # Skip pages larger than this
+    accept_language: en-US,en;q=0.9
+    retry_backoff_factor: 2.0           # Exponential backoff multiplier
+    pool_connections: 10                # Connection pool size
+    pool_maxsize: 20
+  
+  # Stage 6: HTML Parsing
+  parse:
+    parser: html.parser                 # Options: html.parser, lxml, html5lib
+    extract_metadata: true
+    extract_open_graph: true            # Extract Open Graph tags
+    extract_twitter_card: true          # Extract Twitter Card tags
+    extract_canonical: true             # Extract canonical URL
+    extract_language: true              # Extract page language
+    handle_malformed_html: true
+    strip_javascript: true              # Remove <script> tags
+    strip_comments: true                # Remove HTML comments
+    max_html_size_mb: 5
+  
+  # Stage 7: Link Extraction
+  link_extraction:
+    extract_anchor_text: true           # Extract text from <a> tags
+    extract_images: true                # Extract image URLs
+    extract_stylesheets: false          # Extract CSS file links
+    extract_scripts: false              # Extract JS file links
+    follow_iframes: false               # Extract iframe sources
+    ignore_fragments: true              # Ignore #anchor links
+    ignore_query_params: false          # Keep URL query parameters
+    same_domain_only: false             # Only extract same-domain links
+    max_links_per_page: 1000
+  
+  # Stage 8: Content Extraction
+  content_extraction:
+    method: simple                      # Options: simple, trafilatura, readability
+    min_text_length: 100                # Skip pages with less text
+    remove_boilerplate: true            # Remove nav, footer, ads, etc.
+    extract_headings: true              # Extract h1-h6 tags
+    extract_paragraphs: true            # Extract paragraph text
+    extract_lists: true                 # Extract ul/ol lists
+    extract_tables: false               # Extract table data
+    normalize_whitespace: true
+    remove_extra_newlines: true
+    min_paragraph_length: 20
+    max_content_length: 1000000         # Maximum content length to store
+  
+  # Stage 9: Storage
+  storage:
+    storage_type: sqlite                # Options: sqlite, postgresql, filesystem
+    
+    # SQLite settings
+    database_path: data/crawler.db
+    
+    # PostgreSQL settings (if storage_type = postgresql)
+    postgres_host: localhost
+    postgres_port: 5432
+    postgres_database: crawler
+    postgres_user: crawler
+    postgres_password: ""
+    
+    # Filesystem settings (if storage_type = filesystem)
+    output_directory: data/pages
+    
+    # What to store
+    store_html: true
+    store_text: true
+    store_metadata: true
+    store_links: true
+    
+    # Performance
+    batch_size: 100                     # Batch insert size
+    compress_html: true                 # GZIP compress HTML
+    create_indexes: true
+    on_conflict: replace                # Options: replace, ignore, update
+  
+  # Stage 10: Link Re-injection
+  link_reinjection:
+    max_depth: 3                        # Must match url_validation max_depth
+    max_total_pages: 100                # <-- FIX 2: Overrides the 5-page limit bug
+    same_domain_only: false             # Only reinject same-domain links
+    prioritize_shallow_pages: true      # Crawl shallow pages first
+    auto_stop: true                     # Auto-stop when no more URLs
+    stop_on_max_pages: true             # Stop when max_total_pages reached

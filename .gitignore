@@ -1,0 +1,15 @@
+# Python cache files
+__pycache__/
+*.pyc
+
+# Data and logs (DO NOT UPLOAD THESE)
+data/crawler.db
+data/seen_urls.db
+logs/crawler.log
+
+# Compiled C executables
+database
+database.exe
+
+# Config overrides
+yahoo.yaml

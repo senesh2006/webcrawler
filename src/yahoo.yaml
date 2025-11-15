@@ -1,0 +1,25 @@
+# This file overrides the default config to crawl Yahoo Finance
+
+pipeline:
+  # FIX 1: Set storage workers to 1 to prevent "database is locked" errors
+  storage_workers: 1
+
+stages:
+  
+  # Stage 1: URL Validation
+  url_validation:
+    # This prevents the crawler from leaving finance.yahoo.com
+    allowed_domains:
+      - finance.yahoo.com
+
+  # Stage 5: HTTP Fetch
+  fetch:
+    # This enables the headless browser to run JavaScript
+    use_headless_browser: true
+    page_load_delay: 2.0  # Give JS 2 seconds to load
+  
+  # Stage 10: Link Re-injection
+  link_reinjection:
+    # FIX 2: Set the page limit to 100 here to
+    # override the "max_pages = 5" bug from the command line.
+    max_total_pages: 100
